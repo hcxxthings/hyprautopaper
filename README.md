@@ -169,3 +169,7 @@ The Spotlight and Bing feeds are not official public APIs; they are the ones
 Windows and bing.com use and may change. The photos belong to their authors
 (see `hyprautopaper info`); hyprautopaper only downloads them for your own
 desktop.
+
+## License
+
+[MIT](LICENSE)
