@@ -34,6 +34,8 @@ Commands:
   reapply        show the current wallpaper again
   daemon         change the wallpaper every "interval" (for a user service)
   version        print the version
+  completion SHELL
+                 print the completion script for bash, zsh or fish
 
 The config file defaults to $XDG_CONFIG_HOME/hyprautopaper/config.json.
 `
@@ -67,6 +69,12 @@ func run(configPath, cmd string, args []string) error {
 	if cmd == "version" {
 		fmt.Println(version)
 		return nil
+	}
+	if cmd == "completion" {
+		if len(args) != 1 {
+			return usageError{errors.New("usage: completion bash|zsh|fish")}
+		}
+		return printCompletion(args[0])
 	}
 	cfg, err := loadConfig(configPath)
 	if err != nil {

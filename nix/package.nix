@@ -1,6 +1,7 @@
 {
   lib,
   buildGoModule,
+  installShellFiles,
   libnotify,
 }:
 
@@ -26,6 +27,15 @@ buildGoModule (finalAttrs: {
     # Notifications work without libnotify in the user's profile.
     "-X main.notifySend=${lib.getExe' libnotify "notify-send"}"
   ];
+
+  nativeBuildInputs = [ installShellFiles ];
+
+  postInstall = ''
+    installShellCompletion --cmd hyprautopaper \
+      --bash <($out/bin/hyprautopaper completion bash) \
+      --zsh <($out/bin/hyprautopaper completion zsh) \
+      --fish <($out/bin/hyprautopaper completion fish)
+  '';
 
   meta = {
     description = "Wallpaper changer with Windows Spotlight, Bing and wallhaven images, for hyprpaper and other setters";

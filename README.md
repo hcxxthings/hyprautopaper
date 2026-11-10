@@ -24,6 +24,7 @@ hyprautopaper save            copy the current wallpaper to save_dir
 hyprautopaper info [-json]    title, copyright, link and file of the current one
 hyprautopaper reapply         show the current wallpaper again
 hyprautopaper daemon          change every "interval" (run as a user service)
+hyprautopaper completion SHELL  completion script for bash, zsh or fish
 ```
 
 `prev` and `next` move through the last `history` wallpapers like the back and
@@ -59,6 +60,16 @@ bind = SUPER ALT, S, exec, hyprautopaper save
 ```
 
 Set `"notify": true` to see what happened (or why it failed) when a command runs from a key binding.
+
+### Shell completion
+
+The Nix package installs completions for bash, zsh and fish. Otherwise:
+
+```sh
+hyprautopaper completion bash > ~/.local/share/bash-completion/completions/hyprautopaper
+hyprautopaper completion zsh > "${fpath[1]}/_hyprautopaper"
+hyprautopaper completion fish > ~/.config/fish/completions/hyprautopaper.fish
+```
 
 ## Configuration
 
