@@ -22,9 +22,13 @@ var version = "dev"
 const usage = `Usage: hyprautopaper [-config FILE] COMMAND
 
 Commands:
-  next [SOURCE]  next wallpaper: forward in the history, or a new image at
+  next [--force] [SOURCE]
+                 next wallpaper: forward in the history, or a new image at
                  its end; SOURCE (spotlight, bing, wallhaven) forces a new one
-  prev           previous wallpaper from the history
+  prev [--force] previous wallpaper from the history
+  pin            keep the current wallpaper: the daemon stops changing it and
+                 next and prev fail unless given --force, which also unpins
+  unpin          let the wallpaper change again
   save           copy the current wallpaper to "save_dir"
   info [-json]   title, copyright, link and file of the current wallpaper
   reapply        show the current wallpaper again
@@ -57,7 +61,7 @@ func main() {
 type usageError struct{ error }
 
 // Commands that usually run from key bindings, where nobody sees stderr.
-var notifyCommands = []string{"next", "prev", "save"}
+var notifyCommands = []string{"next", "prev", "save", "pin", "unpin"}
 
 func run(configPath, cmd string, args []string) error {
 	if cmd == "version" {
@@ -83,6 +87,14 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 	case "daemon":
 		return daemon(ctx, cfg)
 	case "next", "prev":
+		force := false
+		args = slices.DeleteFunc(slices.Clone(args), func(a string) bool {
+			if a == "--force" || a == "-force" || a == "-f" {
+				force = true
+				return true
+			}
+			return false
+		})
 		to, source := stepNext, ""
 		if cmd == "prev" {
 			to = stepPrev
@@ -96,7 +108,7 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 			}
 			to, source = stepNew, args[0]
 		}
-		e, err := change(ctx, cfg, to, source)
+		e, err := change(ctx, cfg, to, source, force)
 		if err != nil {
 			return err
 		}
@@ -119,6 +131,28 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 			notify(summary, path)
 		}
 		return nil
+	case "pin", "unpin":
+		pinned := cmd == "pin"
+		changed, err := setPin(ctx, pinned)
+		if err != nil {
+			return err
+		}
+		var msg string
+		switch {
+		case pinned && changed:
+			msg = "Wallpaper pinned"
+		case pinned:
+			msg = "Wallpaper was already pinned"
+		case changed:
+			msg = "Wallpaper unpinned"
+		default:
+			msg = "Wallpaper was not pinned"
+		}
+		fmt.Println(msg)
+		if cfg.Notify {
+			notify(msg, "")
+		}
+		return nil
 	case "reapply":
 		cur, err := currentEntry()
 		if err != nil {
@@ -139,6 +173,9 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 		}
 		printInfo(os.Stdout, *cur)
 		fmt.Printf("history: %d of %d\n", st.Cursor+1, len(st.History))
+		if st.Pinned {
+			fmt.Println("pinned:  yes")
+		}
 		return nil
 	}
 	flag.Usage()
@@ -173,8 +210,11 @@ func daemon(ctx context.Context, cfg Config) error {
 		if time.Now().Before(retryAt) {
 			return
 		}
-		e, err := change(ctx, cfg, pending, "")
+		e, err := change(ctx, cfg, pending, "", false)
 		switch {
+		case errors.Is(err, errPinned):
+			// Pinned: not a failure, and change_on_start does not fire after unpin.
+			pending, retryAt, retryDelay = stepAuto, time.Time{}, 0
 		case err != nil:
 			if ctx.Err() != nil {
 				return

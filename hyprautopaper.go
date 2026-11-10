@@ -33,12 +33,16 @@ const maxAttempts = 3
 
 var errNoOlder = errors.New("no older wallpaper in the history")
 
+// errPinned is returned by change while the wallpaper is pinned and force is false.
+var errPinned = errors.New(`the wallpaper is pinned; use --force to change it anyway (this unpins it), or run "hyprautopaper unpin"`)
+
 // change shows another wallpaper and records it in the state. source limits
 // new images to one source; empty means any of cfg.Sources. With stepAuto it
 // returns nil while the wallpaper on screen is newer than cfg.Interval.
-// It runs under the lock, so the daemon and the CLI never change the
+// While the wallpaper is pinned it returns errPinned, unless force is set,
+// which drops the pin once the change succeeds. It runs under the lock, so the daemon and the CLI never change the
 // wallpaper twice in a row or overwrite each other's history.
-func change(ctx context.Context, cfg Config, to step, source string) (*Entry, error) {
+func change(ctx context.Context, cfg Config, to step, source string, force bool) (*Entry, error) {
 	ctx, cancel := context.WithTimeout(ctx, changeTimeout)
 	defer cancel()
 	unlock, err := lock(ctx)
@@ -50,6 +54,12 @@ func change(ctx context.Context, cfg Config, to step, source string) (*Entry, er
 	st, err := loadState()
 	if err != nil {
 		logf("ignoring broken state: %v", err)
+	}
+	if st.Pinned {
+		if !force {
+			return nil, errPinned
+		}
+		st.Pinned = false // saved together with the change, so a failed one keeps the pin
 	}
 	switch to {
 	case stepAuto:
@@ -193,4 +203,33 @@ func save(cfg Config, configPath string) (string, bool, error) {
 		return dst, true, nil
 	}
 	return dst, false, copyFile(cur.Path, dst)
+}
+
+// setPin pins or unpins the wallpaper on screen. It returns false when the
+// pin was already in that state. Unpinning restarts the interval, so the
+// daemon does not change the wallpaper the moment it is unpinned.
+func setPin(ctx context.Context, pinned bool) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, changeTimeout)
+	defer cancel()
+	unlock, err := lock(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+
+	st, err := loadState()
+	if err != nil {
+		return false, err
+	}
+	if st.current() == nil {
+		return false, errNoWallpaper
+	}
+	if st.Pinned == pinned {
+		return false, nil
+	}
+	st.Pinned = pinned
+	if !pinned {
+		st.LastChange = time.Now().Round(0)
+	}
+	return true, saveState(st)
 }

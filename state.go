@@ -22,6 +22,9 @@ type State struct {
 	Cursor int `json:"cursor"`
 	// IDs of images shown before, newest last, so they are not repeated.
 	Seen []string `json:"seen"`
+	// Pinned keeps the wallpaper on screen: the daemon leaves it alone and
+	// next and prev refuse to change it without --force.
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 // Entry is a shown image and its downloaded file.

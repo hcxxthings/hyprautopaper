@@ -183,7 +183,7 @@ func TestPrevNext(t *testing.T) {
 	ctx := context.Background()
 	expect := func(to step, id string) {
 		t.Helper()
-		e, err := change(ctx, cfg, to, "")
+		e, err := change(ctx, cfg, to, "", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -194,19 +194,67 @@ func TestPrevNext(t *testing.T) {
 	}
 	expect(stepPrev, "bing:B")
 	expect(stepPrev, "bing:A")
-	if _, err := change(ctx, cfg, stepPrev, ""); !errors.Is(err, errNoOlder) {
+	if _, err := change(ctx, cfg, stepPrev, "", false); !errors.Is(err, errNoOlder) {
 		t.Fatalf("prev at the oldest: %v", err)
 	}
 	expect(stepNext, "bing:B")
 	expect(stepNext, "bing:C")
 	// A manual change restarts the interval, so the daemon leaves it alone.
-	if e, err := change(ctx, cfg, stepAuto, ""); e != nil || err != nil {
+	if e, err := change(ctx, cfg, stepAuto, "", false); e != nil || err != nil {
 		t.Errorf("auto change right after next: %v, %v", e, err)
 	}
 	for _, e := range hist {
 		if !fileExists(e.Path) {
 			t.Errorf("%s is in the history but was removed", e.Path)
 		}
+	}
+}
+
+func TestPin(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := t.TempDir()
+	out := filepath.Join(dir, "shown")
+	cfg := commandConfig(t, dir, out)
+	var hist []Entry
+	for _, id := range []string{"bing:A", "bing:B"} {
+		p := filepath.Join(dir, cacheName(id)+".jpg")
+		os.WriteFile(p, nil, 0o644)
+		hist = append(hist, Entry{Image: Image{ID: id, Source: "bing"}, Path: p})
+	}
+	// LastChange is long ago, so the daemon would change it if it were not pinned.
+	if err := saveState(State{History: hist, Cursor: 1}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if changed, err := setPin(ctx, true); !changed || err != nil {
+		t.Fatalf("pin: %v, %v", changed, err)
+	}
+	if changed, err := setPin(ctx, true); changed || err != nil {
+		t.Fatalf("pin again: %v, %v", changed, err)
+	}
+	for _, to := range []step{stepAuto, stepNew, stepNext, stepPrev} {
+		if e, err := change(ctx, cfg, to, "", false); e != nil || !errors.Is(err, errPinned) {
+			t.Errorf("step %d while pinned: %v, %v", to, e, err)
+		}
+	}
+	e, err := change(ctx, cfg, stepPrev, "", true)
+	if err != nil || e.ID != "bing:A" {
+		t.Fatalf("prev --force: %v, %v", e, err)
+	}
+	if st, _ := loadState(); st.Pinned {
+		t.Error("--force should unpin")
+	}
+
+	setPin(ctx, true)
+	if changed, err := setPin(ctx, false); !changed || err != nil {
+		t.Fatalf("unpin: %v, %v", changed, err)
+	}
+	// Unpinning restarts the interval.
+	if e, err := change(ctx, cfg, stepAuto, "", false); e != nil || err != nil {
+		t.Errorf("auto change right after unpin: %v, %v", e, err)
+	}
+	if e, err := change(ctx, cfg, stepNext, "", false); err != nil || e.ID != "bing:B" {
+		t.Errorf("next after unpin: %v, %v", e, err)
 	}
 }
 

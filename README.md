@@ -18,6 +18,8 @@ over its IPC, or by any other wallpaper setter (see [Backends](#backends)).
 ```
 hyprautopaper next [SOURCE]   next wallpaper: forward in the history, or a new image
 hyprautopaper prev            previous wallpaper
+hyprautopaper pin             keep the current wallpaper until unpin
+hyprautopaper unpin           let the wallpaper change again
 hyprautopaper save            copy the current wallpaper to save_dir
 hyprautopaper info [-json]    title, copyright, link and file of the current one
 hyprautopaper reapply         show the current wallpaper again
@@ -28,6 +30,11 @@ hyprautopaper daemon          change every "interval" (run as a user service)
 forward buttons of a browser; `next` at the newest one fetches a new image.
 `next SOURCE` always fetches a new image from that source.
 A manual change restarts the interval.
+
+`pin` keeps the current wallpaper: the daemon no longer changes it, neither
+after `interval` nor with `change_on_start`, and `next` and `prev` fail with
+an error. `next --force` and `prev --force` change it anyway and drop the pin.
+`unpin` restarts the interval, so the wallpaper does not change right away.
 
 The daemon checks the wall clock every minute, so suspend and reboots count
 towards the interval. Under Hyprland it also puts the wallpaper back when a
