@@ -302,3 +302,19 @@ func TestSave(t *testing.T) {
 		t.Fatalf("second save: %v, existed %v", err, existed)
 	}
 }
+
+func TestRotate(t *testing.T) {
+	src := []string{"spotlight", "bing", "wallhaven"}
+	for last, want := range map[string][]string{
+		"spotlight": {"bing", "wallhaven", "spotlight"},
+		"bing":      {"wallhaven", "spotlight", "bing"},
+		"wallhaven": {"spotlight", "bing", "wallhaven"},
+	} {
+		if got := rotate(src, last); !slices.Equal(got, want) {
+			t.Errorf("rotate(%q) = %v, want %v", last, got, want)
+		}
+	}
+	if got := rotate(src, ""); len(got) != 3 {
+		t.Errorf("rotate with no last = %v", got)
+	}
+}

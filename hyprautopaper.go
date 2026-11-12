@@ -115,7 +115,11 @@ func showHistory(ctx context.Context, cfg Config, st *State, i int) (*Entry, err
 
 // showNew downloads and shows a new image from one of sources.
 func showNew(ctx context.Context, cfg Config, st *State, sources []string) (*Entry, error) {
-	imgs, err := candidates(ctx, cfg, sources, st.Seen)
+	last := ""
+	if cur := st.current(); cur != nil {
+		last = cur.Source
+	}
+	imgs, err := candidates(ctx, cfg, rotate(sources, last), st.Seen)
 	if err != nil {
 		return nil, err
 	}
@@ -148,13 +152,22 @@ func record(cfg Config, st *State) (*Entry, error) {
 	return &e, nil
 }
 
-// candidates returns the images to try, best first: the not recently shown
-// images of the first source (in random order) that has any, otherwise all
-// images, least recently shown first.
-func candidates(ctx context.Context, cfg Config, sources []string, seen []string) ([]Image, error) {
-	order := slices.Clone(sources)
-	rand.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
+// rotate returns sources in the order to try them: starting with the one
+// after last, so that new images take turns between the sources. When last
+// is not among them (first run, or the config changed), the start is random.
+func rotate(sources []string, last string) []string {
+	start := rand.IntN(len(sources))
+	if i := slices.Index(sources, last); i >= 0 {
+		start = i + 1
+	}
+	start %= len(sources)
+	return append(slices.Clone(sources[start:]), sources[:start]...)
+}
 
+// candidates returns the images to try, best first: the not recently shown
+// images of the first source in order that has any (in random order),
+// otherwise all images, least recently shown first.
+func candidates(ctx context.Context, cfg Config, order []string, seen []string) ([]Image, error) {
 	var all []Image
 	var errs []error
 	for _, name := range order {

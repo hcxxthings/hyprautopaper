@@ -15,7 +15,8 @@ import (
 
 // Config is read from $XDG_CONFIG_HOME/hyprautopaper/config.json. Every field is optional.
 type Config struct {
-	// Sources to pick new images from; one is chosen at random each time.
+	// Sources to pick new images from; they take turns, each new image comes
+	// from the source after the previous one (skipping sources with nothing new).
 	Sources []string `json:"sources"`
 	// Time between automatic changes, e.g. "30m", "2h", "1d", or "off".
 	Interval Duration `json:"interval"`
@@ -63,7 +64,7 @@ var validSources = []string{"spotlight", "bing", "wallhaven"}
 
 func defaultConfig() Config {
 	return Config{
-		Sources:  []string{"spotlight", "bing"},
+		Sources:  []string{"spotlight", "bing", "wallhaven"},
 		Interval: Duration(time.Hour),
 		History:  30,
 		Backend:  "hyprpaper",

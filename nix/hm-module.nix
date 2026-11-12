@@ -46,7 +46,7 @@ in
       default = { };
       example = lib.literalExpression ''
         {
-          sources = [ "spotlight" "bing" ];
+          sources = [ "spotlight" "bing" "wallhaven" ];
           interval = "2h";
           history = 30;
           save_dir = "~/Pictures/Wallpapers";

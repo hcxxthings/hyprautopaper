@@ -77,7 +77,7 @@ hyprautopaper completion fish > ~/.config/fish/completions/hyprautopaper.fish
 
 ```json
 {
-  "sources": ["spotlight", "bing"],
+  "sources": ["spotlight", "bing", "wallhaven"],
   "interval": "1h",
   "change_on_start": false,
   "history": 30,
@@ -101,7 +101,7 @@ hyprautopaper completion fish > ~/.config/fish/completions/hyprautopaper.fish
 
 | key               | meaning |
 |-------------------|---------|
-| `sources`         | where new images come from; one is picked at random each time |
+| `sources`         | where new images come from; they take turns (spotlight, then bing, then wallhaven, ...), skipping a source with nothing new. Bing has only ~15 images, one new a day |
 | `interval`        | time between automatic changes: `30m`, `2h`, `1d`, or `off` for manual changes only |
 | `change_on_start` | fetch a new image every time the daemon starts, instead of showing the last one |
 | `history`         | how many recent wallpapers stay on disk for `prev` |
