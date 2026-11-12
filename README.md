@@ -1,7 +1,7 @@
 # hyprautopaper
 
-Fresh wallpapers from the same curated photo feeds as Windows and Bing,
-with a history you can step through.
+Fresh wallpapers from three sources (Windows Spotlight, Bing image of the
+day and wallhaven), with a history you can step through.
 
 | source      | what                                     | resolution   |
 |-------------|------------------------------------------|--------------|
@@ -9,7 +9,7 @@ with a history you can step through.
 | `bing`      | Bing image of the day (last ~15 days)    | UHD          |
 | `wallhaven` | wallhaven.cc toplist or search, SFW only | configurable |
 
-No API keys needed. Recently shown images are not repeated.
+No API keys needed (wallhaven accepts an optional one). Recently shown images are not repeated.
 The images are shown by [hyprpaper](https://wiki.hypr.land/hypr-ecosystem/user/hyprpaper/)
 over its IPC, or by any other wallpaper setter (see [Backends](#backends)).
 
@@ -184,9 +184,9 @@ needs `hyprctl` (or your setter) and, for `notify`, `notify-send` in `PATH`.
 ## Notes
 
 The Spotlight and Bing feeds are not official public APIs; they are the ones
-Windows and bing.com use and may change. The photos belong to their authors
-(see `hyprautopaper info`); hyprautopaper only downloads them for your own
-desktop.
+Windows and bing.com use and may change; wallhaven is used through its
+public API. The photos belong to their authors (see `hyprautopaper info`);
+hyprautopaper only downloads them for your own desktop.
 
 ## License
 
