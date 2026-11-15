@@ -33,6 +33,8 @@ type CatalogEntry struct {
 	// Total time on screen.
 	Seconds int64 `json:"shown_seconds"`
 	Saved   bool  `json:"saved"`
+	// Whether it was ever pinned; unpinning does not clear it.
+	Pinned bool `json:"pinned"`
 }
 
 func catalogPath() string {
@@ -54,6 +56,13 @@ func readCatalog() (Catalog, error) {
 	}
 	if c == nil { // the file holds "null"
 		c = Catalog{}
+	}
+	// Entries from before the wallpaper found on screen was counted as shown.
+	for id, ce := range c {
+		if ce.Times == 0 {
+			ce.Times = 1
+			c[id] = ce
+		}
 	}
 	return c, nil
 }
@@ -92,6 +101,13 @@ func (c Catalog) update(e Entry, f func(*CatalogEntry)) {
 	ce.Image = e.Image
 	ce.File = filepath.Base(e.Path)
 	f(&ce)
+	// A wallpaper that was on screen before the catalog existed is first seen
+	// here when it is settled, saved or pinned; it was shown once.
+	if ce.Times == 0 {
+		ce.Times = 1
+		ce.FirstShown = time.Now().Round(0)
+		ce.LastShown = ce.FirstShown
+	}
 	c[e.ID] = ce
 }
 
@@ -317,12 +333,9 @@ func printCatalog(w io.Writer, rows []CatalogRow) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "#\tON SCREEN\tSHOWN\tLAST\tSAVED\tSOURCE\tTITLE")
+	fmt.Fprintln(tw, "#\tON SCREEN\tTIMES\tLAST SHOWN\tSAVED\tPINNED\tSOURCE\tTITLE")
+	yesNo := map[bool]string{true: "yes", false: "-"}
 	for _, r := range rows {
-		saved := "-"
-		if r.Saved {
-			saved = "yes"
-		}
 		title := r.Title
 		if title == "" {
 			title = r.ID
@@ -330,9 +343,13 @@ func printCatalog(w io.Writer, rows []CatalogRow) {
 		if r.Current {
 			title += " (current)"
 		}
-		fmt.Fprintf(tw, "%d\t%s\t%dx\t%s\t%s\t%s\t%s\n", r.Rank,
+		last := "-"
+		if !r.LastShown.IsZero() {
+			last = r.LastShown.Local().Format("2006-01-02")
+		}
+		fmt.Fprintf(tw, "%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n", r.Rank,
 			formatScreenTime(time.Duration(r.Seconds)*time.Second), r.Times,
-			r.LastShown.Local().Format("2006-01-02"), saved, r.Source, title)
+			last, yesNo[r.Saved], yesNo[r.Pinned], r.Source, title)
 	}
 	tw.Flush()
 }

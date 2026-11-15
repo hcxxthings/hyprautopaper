@@ -251,7 +251,11 @@ func setPin(ctx context.Context, pinned bool) (bool, error) {
 		return false, nil
 	}
 	st.Pinned = pinned
-	if !pinned {
+	if pinned {
+		cat := loadCatalog()
+		cat.update(*st.current(), func(ce *CatalogEntry) { ce.Pinned = true })
+		cat.save()
+	} else {
 		st.LastChange = time.Now().Round(0)
 	}
 	return true, saveState(st)

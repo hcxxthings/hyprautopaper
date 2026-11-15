@@ -244,6 +244,10 @@ func TestPin(t *testing.T) {
 	if st, _ := loadState(); st.Pinned {
 		t.Error("--force should unpin")
 	}
+	// The catalog remembers that B was pinned, and that A never was.
+	if cat, _ := readCatalog(); !cat["bing:B"].Pinned || cat["bing:A"].Pinned {
+		t.Errorf("pinned in the catalog: B %v, A %v", cat["bing:B"].Pinned, cat["bing:A"].Pinned)
+	}
 
 	setPin(ctx, true)
 	if changed, err := setPin(ctx, false); !changed || err != nil {
@@ -346,7 +350,8 @@ func TestCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b := cat["bing:B"]; !b.Saved || b.Seconds < 7199 || b.Seconds > 7260 || b.File != "bing_B.jpg" {
+	// B was on screen before the catalog existed: it counts as shown once.
+	if b := cat["bing:B"]; !b.Saved || b.Seconds < 7199 || b.Seconds > 7260 || b.File != "bing_B.jpg" || b.Times != 1 || b.LastShown.IsZero() {
 		t.Errorf("B: %+v", b)
 	}
 	if a := cat["bing:A"]; a.Saved || a.Times != 1 || a.Seconds != 0 || a.FirstShown.IsZero() {
@@ -390,8 +395,8 @@ func TestCatalog(t *testing.T) {
 	if st, _ := loadState(); st.current().ID != "bing:B" || len(st.History) != 2 {
 		t.Errorf("history after apply: %+v", st.History)
 	}
-	if cat, _ := readCatalog(); cat["bing:B"].Times != 2 {
-		t.Errorf("B was shown %d times, want 2", cat["bing:B"].Times)
+	if cat, _ := readCatalog(); cat["bing:B"].Times != 3 {
+		t.Errorf("B was shown %d times, want 3", cat["bing:B"].Times)
 	}
 	for _, ref := range []string{"0", "3", "bing:X"} {
 		if _, err := applyCatalog(ctx, cfg, ref, false); !errors.As(err, new(usageError)) {

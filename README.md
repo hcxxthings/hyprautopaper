@@ -40,12 +40,13 @@ an error. `next --force` and `prev --force` change it anyway and drop the pin.
 `unpin` restarts the interval, so the wallpaper does not change right away.
 
 `catalog` lists every wallpaper that was ever shown, ranked by its total time
-on screen, with how often it was shown, when last, and whether it was saved:
+on screen, with how often it was shown, when last, and whether it was saved
+or ever pinned:
 
 ```
-#  ON SCREEN  SHOWN  LAST        SAVED  SOURCE     TITLE
-1  2d 3h      4x     2026-11-14  yes    bing       Autumn in the Dolomites
-2  9h 40m     1x     2026-11-15  -      spotlight  Lofoten, Norway (current)
+#  ON SCREEN  TIMES  LAST SHOWN  SAVED  PINNED  SOURCE     TITLE
+1  2d 3h      4      2026-11-14  yes    yes     bing       Autumn in the Dolomites
+2  9h 40m     1      2026-11-15  -      -       spotlight  Lofoten, Norway (current)
 ```
 
 It lists the top 10; `-n 25` lists 25 and `-n 0` all of them. `-saved` lists
@@ -191,7 +192,7 @@ setter's package in `services.hyprautopaper.extraPackages`.
 
 ```nix
 let
-  src = fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.1.0.tar.gz";
+  src = fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.2.0.tar.gz";
 in
 {
   imports = [ "${src}/nix/hm-module.nix" ];
