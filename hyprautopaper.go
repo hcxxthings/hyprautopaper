@@ -122,22 +122,29 @@ func showNew(ctx context.Context, cfg Config, st *State, cat Catalog, sources []
 	if cur := st.current(); cur != nil {
 		last = cur.Source
 	}
-	imgs, err := candidates(ctx, cfg, rotate(sources, last), st.Seen)
-	if err != nil {
-		return nil, err
-	}
+	order := rotate(sources, last)
 	var errs []error
-	for _, img := range imgs[:min(len(imgs), maxAttempts)] {
-		path, err := download(ctx, img, cfg.CacheDir)
+	// When the downloads of one source fail, go on with the sources after it,
+	// so that a source whose images cannot be downloaded does not block the rest.
+	for len(order) > 0 {
+		imgs, used, err := candidates(ctx, cfg, order, st.Seen)
 		if err != nil {
 			errs = append(errs, err)
-			continue
+			break
 		}
-		if err := show(ctx, cfg, path); err != nil {
-			return nil, err
+		for _, img := range imgs[:min(len(imgs), maxAttempts)] {
+			path, err := download(ctx, img, cfg.CacheDir)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			if err := show(ctx, cfg, path); err != nil {
+				return nil, err
+			}
+			st.add(Entry{Image: img, Path: path}, cfg.History)
+			return record(cfg, st, cat)
 		}
-		st.add(Entry{Image: img, Path: path}, cfg.History)
-		return record(cfg, st, cat)
+		order = order[used+1:]
 	}
 	return nil, errors.Join(errs...)
 }
@@ -172,11 +179,18 @@ func rotate(sources []string, last string) []string {
 
 // candidates returns the images to try, best first: the not recently shown
 // images of the first source in order that has any (in random order),
-// otherwise all images, least recently shown first.
-func candidates(ctx context.Context, cfg Config, order []string, seen []string) ([]Image, error) {
+// otherwise all images, least recently shown first. It also returns the index
+// in order of the last source it used. The errors of sources that failed are
+// logged when another source still had images.
+func candidates(ctx context.Context, cfg Config, order []string, seen []string) ([]Image, int, error) {
 	var all []Image
 	var errs []error
-	for _, name := range order {
+	logErrs := func() {
+		for _, err := range errs {
+			logf("source %v", err)
+		}
+	}
+	for i, name := range order {
 		imgs, err := fetchSource(ctx, name, cfg)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
@@ -184,17 +198,19 @@ func candidates(ctx context.Context, cfg Config, order []string, seen []string) 
 		fresh := slices.DeleteFunc(slices.Clone(imgs), func(im Image) bool { return slices.Contains(seen, im.ID) })
 		if len(fresh) > 0 {
 			rand.Shuffle(len(fresh), func(i, j int) { fresh[i], fresh[j] = fresh[j], fresh[i] })
-			return fresh, nil
+			logErrs()
+			return fresh, i, nil
 		}
 		all = append(all, imgs...)
 	}
 	if len(all) == 0 {
-		return nil, fmt.Errorf("no images: %w", errors.Join(errs...))
+		return nil, 0, fmt.Errorf("no images: %w", errors.Join(errs...))
 	}
+	logErrs()
 	slices.SortStableFunc(all, func(a, b Image) int {
 		return slices.Index(seen, a.ID) - slices.Index(seen, b.ID)
 	})
-	return all, nil
+	return all, len(order) - 1, nil
 }
 
 // save copies the wallpaper on screen into cfg.SaveDir. It returns the copy

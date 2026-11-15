@@ -336,10 +336,7 @@ func printCatalog(w io.Writer, rows []CatalogRow) {
 	fmt.Fprintln(tw, "#\tON SCREEN\tTIMES\tLAST SHOWN\tSAVED\tPINNED\tSOURCE\tTITLE")
 	yesNo := map[bool]string{true: "yes", false: "-"}
 	for _, r := range rows {
-		title := r.Title
-		if title == "" {
-			title = r.ID
-		}
+		title := r.name()
 		if r.Current {
 			title += " (current)"
 		}

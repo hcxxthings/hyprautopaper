@@ -138,7 +138,7 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 			}
 			printInfo(os.Stdout, *e)
 			if cfg.Notify {
-				notify(e.Title, e.credit())
+				notify(e.name(), e.credit())
 			}
 			return nil
 		}
@@ -161,7 +161,7 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 		}
 		printInfo(os.Stdout, *e)
 		if cfg.Notify {
-			notify(e.Title, e.credit())
+			notify(e.name(), e.credit())
 		}
 		return nil
 	case "save":
@@ -238,6 +238,10 @@ const maxRetryDelay = 15 * time.Minute
 // A tick that is this late (they come every minute) means a suspend.
 const suspendGap = 3 * time.Minute
 
+// How often the daemon writes the time on screen to the catalog between
+// changes, so that a crash or power loss loses at most this much of it.
+const countEvery = time.Hour
+
 func daemon(ctx context.Context, cfg Config) error {
 	logf("starting: interval %s, sources %v, backend %s", cfg.Interval, cfg.Sources, cfg.Backend)
 
@@ -280,7 +284,7 @@ func daemon(ctx context.Context, cfg Config) error {
 			logf("change failed, retrying in %s: %v", retryDelay, err)
 		case e != nil:
 			pending, retryAt, retryDelay = stepAuto, time.Time{}, 0
-			logf("now showing %s: %s", e.Source, e.Title)
+			logf("now showing %s: %s", e.Source, e.name())
 		}
 	}
 
@@ -289,6 +293,7 @@ func daemon(ctx context.Context, cfg Config) error {
 	defer ticker.Stop()
 	tick()
 	lastTick := time.Now().Round(0)
+	lastCount := lastTick
 	for {
 		select {
 		case <-ctx.Done():
@@ -300,9 +305,14 @@ func daemon(ctx context.Context, cfg Config) error {
 			// was on screen until the last tick, not until now.
 			if time.Now().Round(0).Sub(lastTick) > suspendGap {
 				countScreenTime(ctx, lastTick, true)
+				lastCount = time.Now().Round(0)
 			}
 			tick()
 			lastTick = time.Now().Round(0)
+			if lastTick.Sub(lastCount) >= countEvery {
+				countScreenTime(ctx, lastTick, true)
+				lastCount = lastTick
+			}
 		case <-monitorAdded:
 			// Give the backend a moment to see the new output first.
 			sleepCtx(ctx, 2*time.Second)
@@ -335,8 +345,16 @@ func (e Entry) credit() string {
 	return e.Link
 }
 
+// name is the title, or the image ID for an image without one.
+func (im Image) name() string {
+	if im.Title != "" {
+		return im.Title
+	}
+	return im.ID
+}
+
 func printInfo(w io.Writer, e Entry) {
-	fmt.Fprintf(w, "%s\n", e.Title)
+	fmt.Fprintf(w, "%s\n", e.name())
 	if e.Copyright != "" {
 		fmt.Fprintf(w, "%s\n", e.Copyright)
 	}

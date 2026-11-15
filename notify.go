@@ -23,7 +23,8 @@ func notify(summary, body string) {
 		"--app-name=hyprautopaper",
 		"--hint=string:x-dunst-stack-tag:hyprautopaper",
 		"--hint=string:x-canonical-private-synchronous:hyprautopaper",
-		summary, markupEscaper.Replace(body)).CombinedOutput()
+		// "--" keeps a summary that starts with "-" from being read as an option.
+		"--", summary, markupEscaper.Replace(body)).CombinedOutput()
 	if err != nil {
 		logf("notify-send: %v: %s", err, strings.TrimSpace(string(out)))
 	}
