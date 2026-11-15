@@ -401,7 +401,7 @@ func TestCatalog(t *testing.T) {
 
 	// A broken catalog is neither used nor overwritten.
 	os.WriteFile(catalogPath(), []byte("{broken"), 0o644)
-	if _, err := change(ctx, cfg, stepNext, "", false); err != nil {
+	if _, err := change(ctx, cfg, stepPrev, "", false); err != nil {
 		t.Fatal(err)
 	}
 	if data, _ := os.ReadFile(catalogPath()); string(data) != "{broken" {
