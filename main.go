@@ -30,6 +30,7 @@ Commands:
                  next and prev fail unless given --force, which also unpins
   unpin          let the wallpaper change again
   save           copy the current wallpaper to "save_dir"
+                 pin, unpin and save can be given together: "save pin"
   info [-json]   title, copyright, link and file of the current wallpaper
   catalog [-json] [-saved] [-n COUNT]
                  every wallpaper shown so far, the longest on screen first;
@@ -69,6 +70,10 @@ func main() {
 type usageError struct{ error }
 
 // Commands that usually run from key bindings, where nobody sees stderr.
+// Commands without arguments that can follow each other on one command
+// line, e.g. "hyprautopaper save pin".
+var chainCommands = []string{"save", "pin", "unpin"}
+
 var notifyCommands = []string{"next", "prev", "apply", "save", "pin", "unpin"}
 
 func run(configPath, cmd string, args []string) error {
@@ -97,6 +102,20 @@ func run(configPath, cmd string, args []string) error {
 }
 
 func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []string) error {
+	if slices.Contains(chainCommands, cmd) && len(args) > 0 {
+		for _, a := range args {
+			if !slices.Contains(chainCommands, a) {
+				return usageError{fmt.Errorf("%s takes no arguments, only %s can follow it", cmd, strings.Join(chainCommands, ", "))}
+			}
+		}
+		// In the order given; the first failure stops the rest.
+		for _, c := range append([]string{cmd}, args...) {
+			if err := dispatch(ctx, cfg, configPath, c, nil); err != nil {
+				return fmt.Errorf("%s: %w", c, err)
+			}
+		}
+		return nil
+	}
 	switch cmd {
 	case "daemon":
 		return daemon(ctx, cfg)

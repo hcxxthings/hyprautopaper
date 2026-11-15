@@ -39,6 +39,10 @@ after `interval` nor with `change_on_start`, and `next` and `prev` fail with
 an error. `next --force` and `prev --force` change it anyway and drop the pin.
 `unpin` restarts the interval, so the wallpaper does not change right away.
 
+`pin`, `unpin` and `save` can share one command line, handy for a single key
+binding: `hyprautopaper save pin` saves the current wallpaper and pins it.
+They run in the order given and stop at the first one that fails.
+
 `catalog` lists every wallpaper that was ever shown, ranked by its total time
 on screen, with how often it was shown, when last, and whether it was saved
 or ever pinned:
@@ -192,7 +196,7 @@ setter's package in `services.hyprautopaper.extraPackages`.
 
 ```nix
 let
-  src = fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.2.0.tar.gz";
+  src = fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.2.1.tar.gz";
 in
 {
   imports = [ "${src}/nix/hm-module.nix" ];

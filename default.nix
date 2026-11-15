@@ -1,5 +1,5 @@
 # For users without flakes: nix-build, or
-#   hyprautopaper = pkgs.callPackage (fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.2.0.tar.gz") { };
+#   hyprautopaper = pkgs.callPackage (fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.2.1.tar.gz") { };
 {
   pkgs ? import <nixpkgs> { },
 }:

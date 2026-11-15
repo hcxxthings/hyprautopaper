@@ -31,6 +31,8 @@ _hyprautopaper() {
             COMPREPLY=($(compgen -W "next prev pin unpin save info catalog apply reapply daemon version completion -config" -- "$cur")) ;;
         next)
             COMPREPLY=($(compgen -W "--force spotlight bing wallhaven" -- "$cur")) ;;
+        save|pin|unpin)
+            COMPREPLY=($(compgen -W "save pin unpin" -- "$cur")) ;;
         prev|apply)
             COMPREPLY=($(compgen -W "--force" -- "$cur")) ;;
         info)
@@ -82,6 +84,8 @@ _hyprautopaper() {
                 apply)
                     _arguments '(-f --force)'{-f,--force}'[change even if pinned]' \
                         '1:number in the catalog or image ID:' ;;
+                save|pin|unpin)
+                    _values 'also' save pin unpin ;;
                 info)
                     _arguments '-json[print JSON]' ;;
                 catalog)
@@ -119,6 +123,7 @@ complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a daem
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a version -d 'Print the version'
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a completion -d 'Print a shell completion script'
 
+complete -c hyprautopaper -n "__fish_seen_subcommand_from save pin unpin" -a 'save pin unpin' -d 'Also do this'
 complete -c hyprautopaper -n "__fish_seen_subcommand_from next prev apply" -s f -l force -d 'Change even if pinned'
 complete -c hyprautopaper -n "__fish_seen_subcommand_from next; and not __fish_seen_subcommand_from spotlight bing wallhaven" -a 'spotlight bing wallhaven' -d 'Source'
 complete -c hyprautopaper -n "__fish_seen_subcommand_from info catalog" -o json -d 'Print JSON'

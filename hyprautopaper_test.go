@@ -305,6 +305,21 @@ func TestSave(t *testing.T) {
 	if _, existed, err := save(cfg, "config.json"); err != nil || !existed {
 		t.Fatalf("second save: %v, existed %v", err, existed)
 	}
+
+	// "save pin" does both.
+	ctx := context.Background()
+	if err := dispatch(ctx, cfg, "config.json", "save", []string{"pin"}); err != nil {
+		t.Fatalf("save pin: %v", err)
+	}
+	if st, _ := loadState(); !st.Pinned {
+		t.Error("save pin did not pin")
+	}
+	if err := dispatch(ctx, cfg, "config.json", "unpin", []string{"next"}); !errors.As(err, new(usageError)) {
+		t.Errorf("unpin next: %v", err)
+	}
+	if st, _ := loadState(); !st.Pinned {
+		t.Error("a rejected command line still unpinned")
+	}
 }
 
 func TestRotate(t *testing.T) {
