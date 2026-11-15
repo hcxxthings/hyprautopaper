@@ -28,13 +28,15 @@ _hyprautopaper() {
 
     case $cmd in
         "")
-            COMPREPLY=($(compgen -W "next prev pin unpin save info reapply daemon version completion -config" -- "$cur")) ;;
+            COMPREPLY=($(compgen -W "next prev pin unpin save info catalog apply reapply daemon version completion -config" -- "$cur")) ;;
         next)
             COMPREPLY=($(compgen -W "--force spotlight bing wallhaven" -- "$cur")) ;;
-        prev)
+        prev|apply)
             COMPREPLY=($(compgen -W "--force" -- "$cur")) ;;
         info)
             COMPREPLY=($(compgen -W "-json" -- "$cur")) ;;
+        catalog)
+            COMPREPLY=($(compgen -W "-json -saved -n" -- "$cur")) ;;
         completion)
             COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur")) ;;
     esac
@@ -54,6 +56,8 @@ _hyprautopaper() {
         'unpin:let the wallpaper change again'
         'save:copy the current wallpaper to save_dir'
         'info:show the current wallpaper'
+        'catalog:every wallpaper shown so far, longest on screen first'
+        'apply:show a wallpaper from the catalog again'
         'reapply:show the current wallpaper again'
         'daemon:change the wallpaper every interval'
         'version:print the version'
@@ -75,8 +79,14 @@ _hyprautopaper() {
                         '1::source:(spotlight bing wallhaven)' ;;
                 prev)
                     _arguments '(-f --force)'{-f,--force}'[change even if pinned]' ;;
+                apply)
+                    _arguments '(-f --force)'{-f,--force}'[change even if pinned]' \
+                        '1:number in the catalog or image ID:' ;;
                 info)
                     _arguments '-json[print JSON]' ;;
+                catalog)
+                    _arguments '-json[print JSON]' '-saved[only saved wallpapers]' \
+                        '-n[how many to list, 0 for all (default 10)]:count:' ;;
                 completion)
                     _arguments '1:shell:(bash zsh fish)' ;;
             esac ;;
@@ -91,7 +101,7 @@ fi
 `
 
 const fishCompletion = `# fish completion for hyprautopaper
-set -l commands next prev pin unpin save info reapply daemon version completion
+set -l commands next prev pin unpin save info catalog apply reapply daemon version completion
 
 complete -c hyprautopaper -f
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -o config -r -F -d 'Config file'
@@ -102,14 +112,18 @@ complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a pin 
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a unpin -d 'Let the wallpaper change again'
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a save -d 'Copy the current wallpaper to save_dir'
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a info -d 'Show the current wallpaper'
+complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a catalog -d 'Every wallpaper shown so far'
+complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a apply -d 'Show a wallpaper from the catalog again'
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a reapply -d 'Show the current wallpaper again'
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a daemon -d 'Change the wallpaper every interval'
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a version -d 'Print the version'
 complete -c hyprautopaper -n "not __fish_seen_subcommand_from $commands" -a completion -d 'Print a shell completion script'
 
-complete -c hyprautopaper -n "__fish_seen_subcommand_from next prev" -s f -l force -d 'Change even if pinned'
+complete -c hyprautopaper -n "__fish_seen_subcommand_from next prev apply" -s f -l force -d 'Change even if pinned'
 complete -c hyprautopaper -n "__fish_seen_subcommand_from next; and not __fish_seen_subcommand_from spotlight bing wallhaven" -a 'spotlight bing wallhaven' -d 'Source'
-complete -c hyprautopaper -n "__fish_seen_subcommand_from info" -o json -d 'Print JSON'
+complete -c hyprautopaper -n "__fish_seen_subcommand_from info catalog" -o json -d 'Print JSON'
+complete -c hyprautopaper -n "__fish_seen_subcommand_from catalog" -o saved -d 'Only saved wallpapers'
+complete -c hyprautopaper -n "__fish_seen_subcommand_from catalog" -o n -x -d 'How many to list, 0 for all (default 10)'
 complete -c hyprautopaper -n "__fish_seen_subcommand_from completion" -a 'bash zsh fish' -d 'Shell'
 `
 

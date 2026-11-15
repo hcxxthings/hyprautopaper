@@ -61,6 +61,9 @@ func change(ctx context.Context, cfg Config, to step, source string, force bool)
 		}
 		st.Pinned = false // saved together with the change, so a failed one keeps the pin
 	}
+	// Like the pin, this only lasts if the change succeeds and is saved.
+	cat := loadCatalog()
+	cat.settle(&st, time.Now().Round(0))
 	switch to {
 	case stepAuto:
 		if !isDue(st, cfg.Interval) {
@@ -68,19 +71,19 @@ func change(ctx context.Context, cfg Config, to step, source string, force bool)
 		}
 	case stepNext:
 		if st.Cursor < len(st.History)-1 {
-			return showHistory(ctx, cfg, &st, st.Cursor+1)
+			return showHistory(ctx, cfg, &st, cat, st.Cursor+1)
 		}
 	case stepPrev:
 		if st.Cursor <= 0 {
 			return nil, errNoOlder
 		}
-		return showHistory(ctx, cfg, &st, st.Cursor-1)
+		return showHistory(ctx, cfg, &st, cat, st.Cursor-1)
 	}
 	sources := cfg.Sources
 	if source != "" {
 		sources = []string{source}
 	}
-	return showNew(ctx, cfg, &st, sources)
+	return showNew(ctx, cfg, &st, cat, sources)
 }
 
 func isDue(st State, interval Duration) bool {
@@ -97,7 +100,7 @@ func isDue(st State, interval Duration) bool {
 }
 
 // showHistory shows History[i], downloading it again if its file is gone.
-func showHistory(ctx context.Context, cfg Config, st *State, i int) (*Entry, error) {
+func showHistory(ctx context.Context, cfg Config, st *State, cat Catalog, i int) (*Entry, error) {
 	e := &st.History[i]
 	if !fileExists(e.Path) {
 		path, err := download(ctx, e.Image, cfg.CacheDir)
@@ -110,11 +113,11 @@ func showHistory(ctx context.Context, cfg Config, st *State, i int) (*Entry, err
 		return nil, err
 	}
 	st.Cursor = i
-	return record(cfg, st)
+	return record(cfg, st, cat)
 }
 
 // showNew downloads and shows a new image from one of sources.
-func showNew(ctx context.Context, cfg Config, st *State, sources []string) (*Entry, error) {
+func showNew(ctx context.Context, cfg Config, st *State, cat Catalog, sources []string) (*Entry, error) {
 	last := ""
 	if cur := st.current(); cur != nil {
 		last = cur.Source
@@ -134,19 +137,22 @@ func showNew(ctx context.Context, cfg Config, st *State, sources []string) (*Ent
 			return nil, err
 		}
 		st.add(Entry{Image: img, Path: path}, cfg.History)
-		return record(cfg, st)
+		return record(cfg, st, cat)
 	}
 	return nil, errors.Join(errs...)
 }
 
-// record saves the state with st.Cursor on screen since now and removes
-// cached images that fell out of the history.
-func record(cfg Config, st *State) (*Entry, error) {
+// record saves the state and the catalog with st.Cursor on screen since now
+// and removes cached images that fell out of the history.
+func record(cfg Config, st *State, cat Catalog) (*Entry, error) {
 	// Round(0) drops the monotonic reading so that time spent suspended counts.
 	st.LastChange = time.Now().Round(0)
+	st.CountedTo = st.LastChange
+	cat.shown(*st.current(), st.LastChange)
 	if err := saveState(*st); err != nil {
 		return nil, err
 	}
+	cat.save()
 	cleanCache(cfg.CacheDir, st.History)
 	e := *st.current()
 	return &e, nil
@@ -212,10 +218,14 @@ func save(cfg Config, configPath string) (string, bool, error) {
 		return "", false, err
 	}
 	dst := filepath.Join(cfg.SaveDir, filepath.Base(cur.Path))
-	if fileExists(dst) {
-		return dst, true, nil
+	existed := fileExists(dst)
+	if !existed {
+		if err := copyFile(cur.Path, dst); err != nil {
+			return dst, false, err
+		}
 	}
-	return dst, false, copyFile(cur.Path, dst)
+	markSaved(cur)
+	return dst, existed, nil
 }
 
 // setPin pins or unpins the wallpaper on screen. It returns false when the

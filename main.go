@@ -31,6 +31,12 @@ Commands:
   unpin          let the wallpaper change again
   save           copy the current wallpaper to "save_dir"
   info [-json]   title, copyright, link and file of the current wallpaper
+  catalog [-json] [-saved] [-n COUNT]
+                 every wallpaper shown so far, the longest on screen first;
+                 -n is how many to list (default 10, 0 for all)
+  apply [--force] NUMBER|ID
+                 show a wallpaper from the catalog again, by its number in
+                 "catalog" or its image ID
   reapply        show the current wallpaper again
   daemon         change the wallpaper every "interval" (for a user service)
   version        print the version
@@ -63,7 +69,7 @@ func main() {
 type usageError struct{ error }
 
 // Commands that usually run from key bindings, where nobody sees stderr.
-var notifyCommands = []string{"next", "prev", "save", "pin", "unpin"}
+var notifyCommands = []string{"next", "prev", "apply", "save", "pin", "unpin"}
 
 func run(configPath, cmd string, args []string) error {
 	if cmd == "version" {
@@ -94,7 +100,7 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 	switch cmd {
 	case "daemon":
 		return daemon(ctx, cfg)
-	case "next", "prev":
+	case "next", "prev", "apply":
 		force := false
 		args = slices.DeleteFunc(slices.Clone(args), func(a string) bool {
 			if a == "--force" || a == "-force" || a == "-f" {
@@ -103,6 +109,20 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 			}
 			return false
 		})
+		if cmd == "apply" {
+			if len(args) != 1 {
+				return usageError{errors.New("usage: apply [--force] NUMBER|ID")}
+			}
+			e, err := applyCatalog(ctx, cfg, args[0], force)
+			if err != nil {
+				return err
+			}
+			printInfo(os.Stdout, *e)
+			if cfg.Notify {
+				notify(e.Title, e.credit())
+			}
+			return nil
+		}
 		to, source := stepNext, ""
 		if cmd == "prev" {
 			to = stepPrev
@@ -161,6 +181,8 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 			notify(msg, "")
 		}
 		return nil
+	case "catalog":
+		return catalogCommand(args)
 	case "reapply":
 		cur, err := currentEntry()
 		if err != nil {
@@ -194,6 +216,9 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 // so it recovers quickly when the network comes up late after boot or resume.
 const maxRetryDelay = 15 * time.Minute
 
+// A tick that is this late (they come every minute) means a suspend.
+const suspendGap = 3 * time.Minute
+
 func daemon(ctx context.Context, cfg Config) error {
 	logf("starting: interval %s, sources %v, backend %s", cfg.Interval, cfg.Sources, cfg.Backend)
 
@@ -204,6 +229,10 @@ func daemon(ctx context.Context, cfg Config) error {
 	if cur, err := currentEntry(); err == nil && fileExists(cur.Path) {
 		reapplyWithRetry(ctx, cfg, cur.Path)
 	}
+
+	// Time on screen counts from now: before this the daemon, and probably the
+	// machine, was off.
+	countScreenTime(ctx, time.Time{}, true)
 
 	// With change_on_start the first change fetches a new image whatever the
 	// age of the current one, and is retried like any other until it works.
@@ -240,13 +269,21 @@ func daemon(ctx context.Context, cfg Config) error {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	tick()
+	lastTick := time.Now().Round(0)
 	for {
 		select {
 		case <-ctx.Done():
 			logf("stopping")
+			countScreenTime(context.Background(), time.Now().Round(0), false)
 			return nil
 		case <-ticker.C:
+			// A late tick means the machine was suspended: the wallpaper
+			// was on screen until the last tick, not until now.
+			if time.Now().Round(0).Sub(lastTick) > suspendGap {
+				countScreenTime(ctx, lastTick, true)
+			}
 			tick()
+			lastTick = time.Now().Round(0)
 		case <-monitorAdded:
 			// Give the backend a moment to see the new output first.
 			sleepCtx(ctx, 2*time.Second)

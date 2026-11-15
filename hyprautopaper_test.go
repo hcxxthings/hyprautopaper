@@ -318,3 +318,106 @@ func TestRotate(t *testing.T) {
 		t.Errorf("rotate with no last = %v", got)
 	}
 }
+
+func TestCatalog(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := t.TempDir()
+	cfg := commandConfig(t, dir, filepath.Join(dir, "shown"))
+	cfg.SaveDir = t.TempDir()
+	var hist []Entry
+	for _, id := range []string{"bing:A", "bing:B"} {
+		p := filepath.Join(dir, cacheName(id)+".jpg")
+		os.WriteFile(p, nil, 0o644)
+		hist = append(hist, Entry{Image: Image{ID: id, Source: "bing"}, Path: p})
+	}
+	// B has been on screen for two hours.
+	since := time.Now().Add(-2 * time.Hour).Round(0)
+	if err := saveState(State{History: hist, Cursor: 1, LastChange: since, CountedTo: since}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, _, err := save(cfg, "config.json"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := change(ctx, cfg, stepPrev, "", false); err != nil {
+		t.Fatal(err)
+	}
+	cat, err := readCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := cat["bing:B"]; !b.Saved || b.Seconds < 7199 || b.Seconds > 7260 || b.File != "bing_B.jpg" {
+		t.Errorf("B: %+v", b)
+	}
+	if a := cat["bing:A"]; a.Saved || a.Times != 1 || a.Seconds != 0 || a.FirstShown.IsZero() {
+		t.Errorf("A: %+v", a)
+	}
+
+	// A suspend: the daemon settles the time up to its last tick only.
+	st, _ := loadState()
+	st.CountedTo = time.Now().Add(-10 * time.Hour).Round(0)
+	saveState(st)
+	countScreenTime(ctx, st.CountedTo.Add(time.Hour), true)
+	cat, _ = readCatalog()
+	if a := cat["bing:A"]; a.Seconds != 3600 {
+		t.Errorf("A after a suspend: %d seconds, want 3600", a.Seconds)
+	}
+	// Stopping the daemon stops the count, and starting it adds nothing.
+	countScreenTime(ctx, time.Now().Round(0), false)
+	if st, _ := loadState(); !st.CountedTo.IsZero() {
+		t.Error("the count goes on after the daemon stopped")
+	}
+	countScreenTime(ctx, time.Time{}, true)
+	cat, _ = readCatalog()
+	st, _ = loadState()
+	rows := catalogRows(cat, st, st.CountedTo.Add(30*time.Minute))
+	if len(rows) != 2 || rows[0].ID != "bing:B" || rows[0].Rank != 1 || !rows[1].Current || rows[1].Seconds < 5400 || rows[1].Seconds > 5460 {
+		t.Errorf("rows: %+v", rows)
+	}
+
+	// apply by number and by ID; the image comes back from save_dir.
+	if e, err := applyCatalog(ctx, cfg, "1", false); err != nil || e.ID != "bing:B" {
+		t.Fatalf("apply 1: %v, %v", e, err)
+	}
+	os.Remove(hist[1].Path)
+	if _, err := change(ctx, cfg, stepPrev, "", false); err != nil {
+		t.Fatal(err)
+	}
+	e, err := applyCatalog(ctx, cfg, "bing:B", false)
+	if err != nil || e.Path != hist[1].Path || !fileExists(e.Path) {
+		t.Fatalf("apply bing:B: %v, %v", e, err)
+	}
+	if st, _ := loadState(); st.current().ID != "bing:B" || len(st.History) != 2 {
+		t.Errorf("history after apply: %+v", st.History)
+	}
+	if cat, _ := readCatalog(); cat["bing:B"].Times != 2 {
+		t.Errorf("B was shown %d times, want 2", cat["bing:B"].Times)
+	}
+	for _, ref := range []string{"0", "3", "bing:X"} {
+		if _, err := applyCatalog(ctx, cfg, ref, false); !errors.As(err, new(usageError)) {
+			t.Errorf("apply %s: %v", ref, err)
+		}
+	}
+
+	// A broken catalog is neither used nor overwritten.
+	os.WriteFile(catalogPath(), []byte("{broken"), 0o644)
+	if _, err := change(ctx, cfg, stepNext, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(catalogPath()); string(data) != "{broken" {
+		t.Errorf("broken catalog was overwritten: %q", data)
+	}
+}
+
+func TestFormatScreenTime(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		20 * time.Second:             "<1m",
+		12 * time.Minute:             "12m",
+		5*time.Hour + 12*time.Minute: "5h 12m",
+		76 * time.Hour:               "3d 4h",
+	} {
+		if got := formatScreenTime(d); got != want {
+			t.Errorf("%s: got %q, want %q", d, got, want)
+		}
+	}
+}

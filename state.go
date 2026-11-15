@@ -25,6 +25,9 @@ type State struct {
 	// Pinned keeps the wallpaper on screen: the daemon leaves it alone and
 	// next and prev refuse to change it without --force.
 	Pinned bool `json:"pinned,omitempty"`
+	// Up to when the time on screen of the current wallpaper is in the
+	// catalog already. Zero while nothing counts (the daemon was stopped).
+	CountedTo time.Time `json:"counted_to,omitzero"`
 }
 
 // Entry is a shown image and its downloaded file.

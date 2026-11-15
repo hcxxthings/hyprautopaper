@@ -22,6 +22,8 @@ hyprautopaper pin             keep the current wallpaper until unpin
 hyprautopaper unpin           let the wallpaper change again
 hyprautopaper save            copy the current wallpaper to save_dir
 hyprautopaper info [-json]    title, copyright, link and file of the current one
+hyprautopaper catalog         every wallpaper shown so far, longest on screen first
+hyprautopaper apply NUMBER    show a wallpaper from the catalog again
 hyprautopaper reapply         show the current wallpaper again
 hyprautopaper daemon          change every "interval" (run as a user service)
 hyprautopaper completion SHELL  completion script for bash, zsh or fish
@@ -36,6 +38,31 @@ A manual change restarts the interval.
 after `interval` nor with `change_on_start`, and `next` and `prev` fail with
 an error. `next --force` and `prev --force` change it anyway and drop the pin.
 `unpin` restarts the interval, so the wallpaper does not change right away.
+
+`catalog` lists every wallpaper that was ever shown, ranked by its total time
+on screen, with how often it was shown, when last, and whether it was saved:
+
+```
+#  ON SCREEN  SHOWN  LAST        SAVED  SOURCE     TITLE
+1  2d 3h      4x     2026-11-14  yes    bing       Autumn in the Dolomites
+2  9h 40m     1x     2026-11-15  -      spotlight  Lofoten, Norway (current)
+```
+
+It lists the top 10; `-n 25` lists 25 and `-n 0` all of them. `-saved` lists
+only the saved ones, and `-json` prints everything, links and image IDs
+included.
+
+`apply 1` shows number 1 of the catalog again and puts it at the end of the
+history; `apply bing:Name` takes the image ID instead, which stays the same
+when the ranking moves. The file comes from the cache, from `save_dir`, or is
+downloaded again, which can fail for an old image the source no longer
+serves. Like `next`, it needs `--force` while the wallpaper is pinned.
+ The time counts while the daemon runs and
+the machine is awake (a locked or dark screen still counts); without the
+daemon it is the time between changes. The catalog is
+`$XDG_STATE_HOME/hyprautopaper/catalog.json` and starts with the first change
+after the update. It keeps the details of an image (title, link, URL), not
+the file, which leaves the cache together with the history.
 
 The daemon checks the wall clock every minute, so suspend and reboots count
 towards the interval. Under Hyprland it also puts the wallpaper back when a
@@ -106,7 +133,7 @@ hyprautopaper completion fish > ~/.config/fish/completions/hyprautopaper.fish
 | `change_on_start` | fetch a new image every time the daemon starts, instead of showing the last one |
 | `history`         | how many recent wallpapers stay on disk for `prev` |
 | `save_dir`        | where `save` copies the current wallpaper. Must exist: `save` fails with the reason when it is not set or missing, instead of creating a directory from a typo |
-| `notify`          | desktop notification (`notify-send`) for `next`, `prev` and `save`, errors included |
+| `notify`          | desktop notification (`notify-send`) for `next`, `prev`, `apply` and `save`, errors included |
 | `backend`         | `hyprpaper` or `command` |
 | `fit_mode`        | hyprpaper only: `contain`, `cover`, `tile` or `fill` |
 | `command`         | for `backend: "command"`: the setter, `{path}` is replaced with the image |
