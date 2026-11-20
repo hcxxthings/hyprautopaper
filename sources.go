@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -42,6 +44,8 @@ func fetchSource(ctx context.Context, name string, cfg Config) ([]Image, error) 
 		return fetchSpotlight(ctx, cfg)
 	case "wallhaven":
 		return fetchWallhaven(ctx, cfg)
+	case "local":
+		return fetchLocal(cfg.LocalDir)
 	}
 	return nil, fmt.Errorf("unknown source %q", name)
 }
@@ -235,6 +239,55 @@ func getJSON(ctx context.Context, u string, header http.Header, v any) error {
 		return fmt.Errorf("GET %s: %s", req.URL.Host, res.Status)
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, 8<<20)).Decode(v)
+}
+
+// fetchLocal returns the images in dir, without its subdirectories.
+func fetchLocal(dir string) ([]Image, error) {
+	if dir == "" {
+		return nil, errors.New(`set "local_dir" (or "save_dir") in the config`)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var imgs []Image
+	for _, e := range entries {
+		name := e.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+		if strings.HasPrefix(name, ".") || !slices.Contains(localExts, ext) {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		// Stat follows symlinks, which home-manager uses for files it manages.
+		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		imgs = append(imgs, localImage(path))
+	}
+	if len(imgs) == 0 {
+		return nil, fmt.Errorf("no images in %s", dir)
+	}
+	return dedupe(imgs), nil
+}
+
+// Extensions of the files the local source picks up. The format itself is
+// checked when the file is copied into the cache.
+var localExts = []string{".jpg", ".jpeg", ".png", ".webp", ".jxl"}
+
+// localImage describes the image file at the absolute path. Its ID is the
+// path without the extension, relative to the home directory when it is in
+// there, so the same file gets the same ID from "set" and the local source.
+func localImage(path string) Image {
+	rel := strings.TrimSuffix(path, filepath.Ext(path))
+	if r, ok := strings.CutPrefix(rel, homeDir()+"/"); ok {
+		rel = r
+	}
+	return Image{
+		ID:     "local:" + rel,
+		Source: "local",
+		URL:    fileURL(path),
+		Title:  strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+	}
 }
 
 func dedupe(in []Image) []Image {

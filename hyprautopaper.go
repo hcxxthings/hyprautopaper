@@ -234,6 +234,14 @@ func save(cfg Config, configPath string) (string, bool, error) {
 		return "", false, err
 	}
 	dst := filepath.Join(cfg.SaveDir, filepath.Base(cur.Path))
+	// An image of your own keeps its name; one that is in save_dir already
+	// (the local source reads it by default) is not copied a second time.
+	if orig, ok := localPath(cur.Image); ok {
+		dst = filepath.Join(cfg.SaveDir, filepath.Base(orig))
+		if filepath.Dir(orig) == cfg.SaveDir {
+			dst = orig
+		}
+	}
 	existed := fileExists(dst)
 	if !existed {
 		if err := copyFile(cur.Path, dst); err != nil {

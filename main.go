@@ -24,7 +24,8 @@ const usage = `Usage: hyprautopaper [-config FILE] COMMAND
 Commands:
   next [--force] [SOURCE]
                  next wallpaper: forward in the history, or a new image at
-                 its end; SOURCE (spotlight, bing, wallhaven) forces a new one
+                 its end; SOURCE (spotlight, bing, wallhaven, local) forces
+                 a new one
   prev [--force] previous wallpaper from the history
   pin            keep the current wallpaper: the daemon stops changing it and
                  next and prev fail unless given --force, which also unpins
@@ -35,6 +36,9 @@ Commands:
   catalog [-json] [-saved] [-n COUNT]
                  every wallpaper shown so far, the longest on screen first;
                  -n is how many to list (default 10, 0 for all)
+  set [--force] [--no-pin] FILE
+                 show an image file of your own and pin it; --no-pin lets
+                 the daemon change it after "interval"
   apply [--force] NUMBER|ID
                  show a wallpaper from the catalog again, by its number in
                  "catalog" or its image ID
@@ -74,7 +78,7 @@ type usageError struct{ error }
 // line, e.g. "hyprautopaper save pin".
 var chainCommands = []string{"save", "pin", "unpin"}
 
-var notifyCommands = []string{"next", "prev", "apply", "save", "pin", "unpin"}
+var notifyCommands = []string{"next", "prev", "apply", "set", "save", "pin", "unpin"}
 
 func run(configPath, cmd string, args []string) error {
 	if cmd == "version" {
@@ -119,20 +123,36 @@ func dispatch(ctx context.Context, cfg Config, configPath, cmd string, args []st
 	switch cmd {
 	case "daemon":
 		return daemon(ctx, cfg)
-	case "next", "prev", "apply":
-		force := false
+	case "next", "prev", "apply", "set":
+		force, noPin := false, false
 		args = slices.DeleteFunc(slices.Clone(args), func(a string) bool {
-			if a == "--force" || a == "-force" || a == "-f" {
+			switch a {
+			case "--force", "-force", "-f":
 				force = true
-				return true
+			case "--no-pin", "-no-pin":
+				if cmd != "set" {
+					return false
+				}
+				noPin = true
+			default:
+				return false
 			}
-			return false
+			return true
 		})
-		if cmd == "apply" {
-			if len(args) != 1 {
-				return usageError{errors.New("usage: apply [--force] NUMBER|ID")}
+		if cmd == "apply" || cmd == "set" {
+			var e *Entry
+			var err error
+			if cmd == "apply" {
+				if len(args) != 1 {
+					return usageError{errors.New("usage: apply [--force] NUMBER|ID")}
+				}
+				e, err = applyCatalog(ctx, cfg, args[0], force)
+			} else {
+				if len(args) != 1 {
+					return usageError{errors.New("usage: set [--force] [--no-pin] FILE")}
+				}
+				e, err = setFile(ctx, cfg, args[0], !noPin, force)
 			}
-			e, err := applyCatalog(ctx, cfg, args[0], force)
 			if err != nil {
 				return err
 			}

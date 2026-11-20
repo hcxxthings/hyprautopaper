@@ -37,8 +37,8 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Interval != 0 || cfg.SaveDir != filepath.Join(home, "Saved") {
-		t.Errorf("interval %v, save_dir %q", cfg.Interval, cfg.SaveDir)
+	if cfg.Interval != 0 || cfg.SaveDir != filepath.Join(home, "Saved") || cfg.LocalDir != cfg.SaveDir {
+		t.Errorf("interval %v, save_dir %q, local_dir %q", cfg.Interval, cfg.SaveDir, cfg.LocalDir)
 	}
 	// Keys that are not set keep their defaults, also inside objects.
 	if cfg.History != 30 || cfg.Wallhaven.Query != "sea" || cfg.Wallhaven.Categories != "100" {
@@ -58,6 +58,7 @@ func TestValidate(t *testing.T) {
 		"unknown fit_mode":     func(c *Config) { c.FitMode = "stretch" },
 		"command without path": func(c *Config) { c.Backend, c.Command = "command", []string{"awww", "img"} },
 		"empty history":        func(c *Config) { c.History = 0 },
+		"local without dir":    func(c *Config) { c.Sources = []string{"bing", "local"} },
 	}
 	for name, change := range bad {
 		c := defaultConfig()
@@ -439,5 +440,97 @@ func TestFormatScreenTime(t *testing.T) {
 		if got := formatScreenTime(d); got != want {
 			t.Errorf("%s: got %q, want %q", d, got, want)
 		}
+	}
+}
+
+const (
+	jpegData = "\xff\xd8\xff\xe0 a jpeg"
+	pngData  = "\x89PNG\r\n\x1a\n a png"
+)
+
+func TestLocal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := t.TempDir()
+	out := filepath.Join(dir, "shown")
+	cfg := commandConfig(t, filepath.Join(dir, "cache"), out)
+	cfg.LocalDir = filepath.Join(home, "Pictures")
+	os.Mkdir(cfg.LocalDir, 0o755)
+	for name, data := range map[string]string{
+		"a.jpg": jpegData, "b.PNG": pngData, ".hidden.jpg": jpegData, "notes.txt": "text",
+	} {
+		os.WriteFile(filepath.Join(cfg.LocalDir, name), []byte(data), 0o644)
+	}
+
+	imgs, err := fetchLocal(cfg.LocalDir)
+	var ids []string
+	for _, im := range imgs {
+		ids = append(ids, im.ID)
+	}
+	slices.Sort(ids)
+	if err != nil || !slices.Equal(ids, []string{"local:Pictures/a", "local:Pictures/b"}) {
+		t.Fatalf("fetchLocal: %v, %v", ids, err)
+	}
+	if _, err := fetchLocal(t.TempDir()); err == nil {
+		t.Error("an empty local_dir should fail")
+	}
+
+	// The local source copies the image into the cache.
+	ctx := context.Background()
+	e, err := change(ctx, cfg, stepNew, "local", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown, _ := os.ReadFile(out); e.Source != "local" || filepath.Dir(e.Path) != cfg.CacheDir || string(shown) != e.Path {
+		t.Fatalf("local source: %+v, command saw %q", e, shown)
+	}
+
+	// set takes any file, pins it and leaves the original alone.
+	other := filepath.Join(t.TempDir(), "my photo, 1.jpg")
+	os.WriteFile(other, []byte(jpegData), 0o644)
+	if _, err := setFile(ctx, cfg, other, true, false); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := loadState()
+	cur := st.current()
+	if data, _ := os.ReadFile(cur.Path); !st.Pinned || cur.Title != "my photo, 1" || string(data) != jpegData || strings.Contains(cur.Path, ",") {
+		t.Fatalf("set: pinned %v, %+v", st.Pinned, cur)
+	}
+	if cat, _ := readCatalog(); !cat[cur.ID].Pinned || cat[cur.ID].Times != 1 {
+		t.Errorf("catalog after set: %+v", cat[cur.ID])
+	}
+	if _, err := setFile(ctx, cfg, filepath.Join(cfg.LocalDir, "a.jpg"), true, false); !errors.Is(err, errPinned) {
+		t.Errorf("set while pinned: %v", err)
+	}
+	if _, err := setFile(ctx, cfg, filepath.Join(cfg.LocalDir, "notes.txt"), false, true); err == nil {
+		t.Error("set of a text file should fail")
+	}
+	if _, err := setFile(ctx, cfg, filepath.Join(cfg.LocalDir, "b.PNG"), false, true); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := loadState(); st.Pinned {
+		t.Error("set --no-pin --force left the pin")
+	}
+
+	// A local image whose cached copy is gone is copied again for prev.
+	os.Remove(cur.Path)
+	if e, err := change(ctx, cfg, stepPrev, "", false); err != nil || !fileExists(e.Path) || e.ID != cur.ID {
+		t.Fatalf("prev to a removed copy: %v, %v", e, err)
+	}
+	if !fileExists(other) {
+		t.Error("the original file was removed")
+	}
+
+	// save keeps the original name, and does not copy an image from save_dir.
+	cfg.SaveDir = t.TempDir()
+	dst, existed, err := save(cfg, "config.json")
+	if err != nil || existed || filepath.Base(dst) != "my photo, 1.jpg" {
+		t.Errorf("save of a local image: %s, %v, %v", dst, existed, err)
+	}
+	cfg.SaveDir = cfg.LocalDir
+	change(ctx, cfg, stepNext, "", false) // b.PNG, from local_dir
+	if dst, existed, err := save(cfg, "config.json"); err != nil || !existed || dst != filepath.Join(cfg.LocalDir, "b.PNG") {
+		t.Errorf("save of an image in save_dir: %s, %v, %v", dst, existed, err)
 	}
 }

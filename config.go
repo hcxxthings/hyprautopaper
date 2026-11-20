@@ -26,6 +26,8 @@ type Config struct {
 	History int `json:"history"`
 	// Directory that "hyprautopaper save" copies the current wallpaper to. It must exist.
 	SaveDir string `json:"save_dir"`
+	// Directory of your own images for the "local" source; empty means save_dir.
+	LocalDir string `json:"local_dir"`
 	// Show a desktop notification for next, prev and save, errors included.
 	Notify bool `json:"notify"`
 
@@ -60,7 +62,7 @@ type WallhavenConfig struct {
 	APIKeyFile string `json:"api_key_file"`
 }
 
-var validSources = []string{"spotlight", "bing", "wallhaven"}
+var validSources = []string{"spotlight", "bing", "wallhaven", "local"}
 
 func defaultConfig() Config {
 	return Config{
@@ -107,6 +109,11 @@ func loadConfig(path string) (Config, error) {
 			return cfg, err
 		}
 	}
+	if cfg.LocalDir == "" {
+		cfg.LocalDir = cfg.SaveDir
+	} else if cfg.LocalDir, err = filepath.Abs(expandHome(cfg.LocalDir)); err != nil {
+		return cfg, err
+	}
 	cfg.Wallhaven.APIKeyFile = expandHome(cfg.Wallhaven.APIKeyFile)
 	if err := cfg.validate(); err != nil {
 		return cfg, fmt.Errorf("%s: %w", path, err)
@@ -122,6 +129,9 @@ func (c Config) validate() error {
 		if !slices.Contains(validSources, s) {
 			return fmt.Errorf("unknown source %q (valid: %s)", s, strings.Join(validSources, ", "))
 		}
+	}
+	if slices.Contains(c.Sources, "local") && c.LocalDir == "" {
+		return errors.New(`source "local" needs "local_dir" (or "save_dir")`)
 	}
 	// 0 means "off".
 	if c.Interval != 0 && c.Interval < Duration(time.Minute) {

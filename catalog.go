@@ -225,6 +225,57 @@ func applyCatalog(ctx context.Context, cfg Config, ref string, force bool) (*Ent
 	return record(cfg, &st, cat)
 }
 
+// setFile shows the image file at path and puts it at the end of the history;
+// with pin it also pins it. A pin already in place is handled as in change.
+// The file is copied into the cache, like a download.
+func setFile(ctx context.Context, cfg Config, path string, pin, force bool) (*Entry, error) {
+	path, err := filepath.Abs(expandHome(path))
+	if err != nil {
+		return nil, err
+	}
+	if info, err := os.Stat(path); err != nil {
+		return nil, usageError{err}
+	} else if !info.Mode().IsRegular() {
+		return nil, usageError{fmt.Errorf("%s is not a file", path)}
+	}
+	ctx, cancel := context.WithTimeout(ctx, changeTimeout)
+	defer cancel()
+	unlock, err := lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+
+	st, err := loadState()
+	if err != nil {
+		logf("ignoring broken state: %v", err)
+	}
+	if st.Pinned {
+		if !force {
+			return nil, errPinned
+		}
+		st.Pinned = false
+	}
+	cat := loadCatalog()
+	cat.settle(&st, time.Now().Round(0))
+	img := localImage(path)
+	cached, err := download(ctx, img, cfg.CacheDir)
+	if err != nil {
+		return nil, usageError{err}
+	}
+	if err := show(ctx, cfg, cached); err != nil {
+		return nil, err
+	}
+	st.add(Entry{Image: img, Path: cached}, cfg.History)
+	st.Pinned = pin
+	e, err := record(cfg, &st, cat)
+	if err == nil && pin {
+		cat.update(*e, func(ce *CatalogEntry) { ce.Pinned = true })
+		cat.save()
+	}
+	return e, err
+}
+
 // findCatalog returns the row with rank or image ID ref.
 func findCatalog(rows []CatalogRow, ref string) (CatalogEntry, error) {
 	if n, err := strconv.Atoi(ref); err == nil {

@@ -1,13 +1,14 @@
 # hyprautopaper
 
 Fresh wallpapers from three sources (Windows Spotlight, Bing image of the
-day and wallhaven), with a history you can step through.
+day and wallhaven), and your own images, with a history you can step through.
 
 | source      | what                                     | resolution   |
 |-------------|------------------------------------------|--------------|
 | `spotlight` | Windows 11 desktop Spotlight images      | 3840x2160    |
 | `bing`      | Bing image of the day (last ~15 days)    | UHD          |
 | `wallhaven` | wallhaven.cc toplist or search, SFW only | configurable |
+| `local`     | your own images in `local_dir`           | as they are  |
 
 No API keys needed (wallhaven accepts an optional one). Recently shown images are not repeated.
 The images are shown by [hyprpaper](https://wiki.hypr.land/hypr-ecosystem/user/hyprpaper/)
@@ -24,6 +25,7 @@ hyprautopaper save            copy the current wallpaper to save_dir
 hyprautopaper info [-json]    title, copyright, link and file of the current one
 hyprautopaper catalog         every wallpaper shown so far, longest on screen first
 hyprautopaper apply NUMBER    show a wallpaper from the catalog again
+hyprautopaper set FILE        show an image of your own and pin it
 hyprautopaper reapply         show the current wallpaper again
 hyprautopaper daemon          change every "interval" (run as a user service)
 hyprautopaper completion SHELL  completion script for bash, zsh or fish
@@ -42,6 +44,13 @@ an error. `next --force` and `prev --force` change it anyway and drop the pin.
 `pin`, `unpin` and `save` can share one command line, handy for a single key
 binding: `hyprautopaper save pin` saves the current wallpaper and pins it.
 They run in the order given and stop at the first one that fails.
+
+`set ~/Pictures/beach.jpg` shows an image file of your own and pins it, so
+the daemon leaves it on screen until `unpin` or the next `next --force`;
+`set --no-pin FILE` lets the daemon change it after `interval`. Like `next`,
+it needs `--force` while the wallpaper is pinned. The file is copied into the
+cache, so `prev` and `next` reach it like any other wallpaper and it appears
+in the catalog.
 
 `catalog` lists every wallpaper that was ever shown, ranked by its total time
 on screen, with how often it was shown, when last, and whether it was saved
@@ -114,6 +123,7 @@ hyprautopaper completion fish > ~/.config/fish/completions/hyprautopaper.fish
   "change_on_start": false,
   "history": 30,
   "save_dir": "",
+  "local_dir": "",
   "notify": false,
   "backend": "hyprpaper",
   "fit_mode": "cover",
@@ -133,12 +143,13 @@ hyprautopaper completion fish > ~/.config/fish/completions/hyprautopaper.fish
 
 | key               | meaning |
 |-------------------|---------|
-| `sources`         | where new images come from; they take turns (spotlight, then bing, then wallhaven, ...), skipping a source with nothing new. Bing has only ~15 images, one new a day |
+| `sources`         | where new images come from; they take turns (spotlight, then bing, then wallhaven, ...), skipping a source with nothing new. Bing has only ~15 images, one new a day. `local` takes images from `local_dir` |
 | `interval`        | time between automatic changes: `30m`, `2h`, `1d`, or `off` for manual changes only |
 | `change_on_start` | fetch a new image every time the daemon starts, instead of showing the last one |
 | `history`         | how many recent wallpapers stay on disk for `prev` |
 | `save_dir`        | where `save` copies the current wallpaper. Must exist: `save` fails with the reason when it is not set or missing, instead of creating a directory from a typo |
-| `notify`          | desktop notification (`notify-send`) for `next`, `prev`, `apply` and `save`, errors included |
+| `local_dir`       | directory of your own images for the `local` source (`.jpg`, `.png`, `.webp`, `.jxl`; subdirectories are not read). Empty means `save_dir`, so the saved wallpapers come back |
+| `notify`          | desktop notification (`notify-send`) for `next`, `prev`, `apply`, `set` and `save`, errors included |
 | `backend`         | `hyprpaper` or `command` |
 | `fit_mode`        | hyprpaper only: `contain`, `cover`, `tile` or `fill` |
 | `command`         | for `backend: "command"`: the setter, `{path}` is replaced with the image |
@@ -196,7 +207,7 @@ setter's package in `services.hyprautopaper.extraPackages`.
 
 ```nix
 let
-  src = fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.2.1.tar.gz";
+  src = fetchTarball "https://github.com/hcxxthings/hyprautopaper/archive/v0.3.0.tar.gz";
 in
 {
   imports = [ "${src}/nix/hm-module.nix" ];
